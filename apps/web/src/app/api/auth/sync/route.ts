@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
+import { getBackendUrl } from "../../../../lib/backend";
 
 const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY;
 const CLERK_ORG_ID = process.env.CLERK_ORG_ID || "org_3JOvLRFnE0PQixivSXSmJC5Gcdt";
-const BACKEND_URL = process.env.INTERNAL_BACKEND_URL || "http://127.0.0.1:8000";
 
 export async function GET(req: NextRequest) {
+  const BACKEND_URL = getBackendUrl();
   try {
     const { userId, getToken } = await auth();
     if (!userId) {

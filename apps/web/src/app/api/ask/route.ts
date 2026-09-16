@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
-
-const BACKEND_URL = process.env.INTERNAL_BACKEND_URL || "http://127.0.0.1:8000";
+import { getBackendUrl } from "../../../lib/backend";
 
 export async function POST(req: NextRequest) {
+  const BACKEND_URL = getBackendUrl();
   try {
     const { userId, getToken } = await auth();
     const token = await getToken();
