@@ -1,0 +1,7 @@
+/* The ONLY stylesheet in apps/native — decision #15. Imported once in
+   index.ts (the app entry), compiled by Metro via metro.config.js's
+   withNativeWind. Utility classes are used directly on React Native
+   components via className. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

@@ -1,0 +1,27 @@
+# Local fast-feedback layer.
+# CI is the real, non-bypassable gate.
+# Install with: pre-commit install --hook-type pre-push
+
+repos:
+  - repo: local
+    hooks:
+      - id: affected-lint
+        name: lint affected JS/TS projects
+        entry: pnpm lint:affected
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: affected-tests-coverage
+        name: JS/TS affected tests + coverage >= 80%
+        entry: pnpm test:affected
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: backend-tests-architecture-coverage
+        name: backend tests + ArchUnitPython architecture checks + coverage >= 80%
+        entry: bash -c "cd backend && pytest --cov --cov-fail-under=80"
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

@@ -1,0 +1,61 @@
+services:
+  - type: web
+    name: ask-policy-web
+    runtime: node
+    plan: free
+    rootDir: apps/web
+    buildCommand: pnpm install && pnpm build
+    startCommand: pnpm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: NEXT_PUBLIC_API_BASE_URL
+        fromService:
+          type: web
+          name: ask-policy-api
+          property: host
+
+  - type: web
+    name: ask-policy-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -e .
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ask-policy-db
+          property: connectionString
+      - key: AZURE_OPENAI_ENDPOINT
+        sync: false
+      - key: AZURE_OPENAI_API_KEY
+        sync: false
+      - key: AZURE_OPENAI_CHAT_DEPLOYMENT
+        value: gpt-5.6-luna
+      - key: AZURE_OPENAI_EMBEDDING_DEPLOYMENT
+        value: text-embedding-3-large
+      - key: AZURE_STORAGE_CONNECTION_STRING
+        sync: false
+      - key: AZURE_STORAGE_CONTAINER
+        value: dss-ask-policy-content
+      - key: CLERK_JWKS_URL
+        value: https://sensible-skylark-9101.clerk.accounts.dev/.well-known/jwks.json
+      - key: CLERK_ORG_ID
+        value: org_3JOvLRFnE0PQixivSXSmJC5Gcdt
+      - key: JIRA_SITE_URL
+        value: https://fde-dss-logistics.atlassian.net
+      - key: JIRA_PROJECT_KEY
+        value: HRSD
+
+databases:
+  - name: ask-policy-db
+    plan: free
+    databaseName: ask_policy
+    user: ask_policy_user

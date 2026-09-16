@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: {{PROJECT_SLUG}}-web
+    runtime: node
+    plan: starter
+    rootDir: apps/web
+    buildCommand: pnpm install && pnpm build
+    startCommand: pnpm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_BASE_URL
+        fromService:
+          type: web
+          name: {{PROJECT_SLUG}}-api
+          property: host
+
+  - type: web
+    name: {{PROJECT_SLUG}}-api
+    runtime: python
+    plan: starter
+    rootDir: backend
+    buildCommand: pip install .
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: {{PROJECT_SLUG}}-db
+          property: connectionString
+
+databases:
+  - name: {{PROJECT_SLUG}}-db
+    plan: starter
+    databaseName: {{DB_NAME}}
+    user: dbuser

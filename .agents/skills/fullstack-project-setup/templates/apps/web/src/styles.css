@@ -1,0 +1,5 @@
+/* The ONLY stylesheet in apps/web — decision #15. Tailwind v4 needs no
+   config file for the default setup; utility classes are used directly in
+   JSX. Do not add CSS modules, styled-components, or another CSS-in-JS
+   library. app/theme customizations go here as @theme blocks. */
+@import "tailwindcss";

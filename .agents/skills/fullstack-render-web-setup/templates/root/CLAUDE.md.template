@@ -1,0 +1,37 @@
+# {{PROJECT_NAME}}
+
+This project follows a locked architecture standard. **Read this before writing any code.**
+Enforced by tooling (lint, ArchUnitPython, Vitest, CI, pre-push hooks), not by memory.
+
+## Layout
+
+```
+{{PROJECT_SLUG}}/
+├── apps/
+│   └── web/          # Web frontend (Next.js / Vite React). Routing + UI presentation ONLY.
+├── packages/
+│   ├── core/         # Types, generated API client, zod schemas, pure business rules. No JSX.
+│   ├── hooks/        # All useX() orchestration: React Query, forms. No JSX.
+│   └── env/          # Validated client env schema.
+├── backend/          # FastAPI, async SQLAlchemy, Alembic, ArchUnitPython tests.
+└── render.yaml       # Render Blueprint for web service, api service, and managed Postgres.
+```
+
+## Hard rules
+
+1. **Business logic never lives in `apps/web`.** If you're writing a validation rule, an API call, a data transform, or anything that isn't "how does this look/navigate in the browser", it belongs in `packages/core` or `packages/hooks`, not in a component.
+2. **Architecture standardization with ArchUnitPython:**
+   - Architecture tests live in `backend/tests/test_architecture.py`.
+   - No circular dependencies: `project_files("app/").should().have_no_cycles()`
+   - Layer boundaries: `app/core` must never depend on domain feature slices in `app/features`.
+   - File length limit: `metrics("app/").count().lines_of_code().should_be_below(1000)` enforced via pytest!
+3. **No file exceeds 1000 lines.** Enforced by ESLint `max-lines` for TS/JS and ArchUnitPython for Python.
+4. **80% test coverage, repo-wide, is a hard gate.** CI blocks merge below it; the pre-push hook catches it locally.
+5. **Async SQLAlchemy: never rely on implicit lazy-loading.** Always use explicit `selectinload` or `joinedload`.
+6. **Every backend error is RFC 7807** (`application/problem+json`). Use shared exception handlers in `app/core/errors.py`.
+7. **Render deployment alignment:**
+   - Database connection strings automatically adapt from Render's `postgres://` or `postgresql://` to `postgresql+asyncpg://`.
+   - Render managed Postgres with pgvector/pgcrypto extensions.
+   - Ignore unsupported extensions (such as `azure_ai`, `age`, or `pgrouting`).
+8. **Test runners:** Vitest across `apps/web` and `packages/*`. Pytest across `backend/`.
+9. **Migrations go through Alembic**, always.
