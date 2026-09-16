@@ -20,25 +20,6 @@ importers:
       '@clerk/nextjs':
         specifier: ^6.0.0
         version: 6.39.6(next@14.2.35(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      clsx:
-        specifier: ^2.1.1
-        version: 2.1.1
-      lucide-react:
-        specifier: ^0.446.0
-        version: 0.446.0(react@18.3.1)
-      next:
-        specifier: ^14.2.13
-        version: 14.2.35(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      react:
-        specifier: ^18.3.1
-        version: 18.3.1
-      react-dom:
-        specifier: ^18.3.1
-        version: 18.3.1(react@18.3.1)
-      tailwind-merge:
-        specifier: ^2.5.2
-        version: 2.6.1
-    devDependencies:
       '@types/node':
         specifier: ^20.16.5
         version: 20.19.43
@@ -51,9 +32,27 @@ importers:
       autoprefixer:
         specifier: ^10.4.20
         version: 10.6.1(postcss@8.5.28)
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
+      lucide-react:
+        specifier: ^0.446.0
+        version: 0.446.0(react@18.3.1)
+      next:
+        specifier: ^14.2.13
+        version: 14.2.35(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       postcss:
         specifier: ^8.4.47
         version: 8.5.28
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
+      tailwind-merge:
+        specifier: ^2.5.2
+        version: 2.6.1
       tailwindcss:
         specifier: ^3.4.11
         version: 3.4.19
