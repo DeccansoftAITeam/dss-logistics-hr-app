@@ -1,1 +1,7 @@
-https://claude.ai/code/artifact/455c2f91-7a9f-49aa-b336-fb4a6fde816e
+# DSS Logistics Live Production URLs
+
+- Web App (Next.js 14): https://dss-ask-policy-web.onrender.com
+- Backend API (FastAPI): https://ask-policy-api.onrender.com
+- API Health Check: https://ask-policy-api.onrender.com/healthz
+- GitHub Repository: https://github.com/DeccansoftAITeam/dss-logistics-hr-app
+- Claude Artifact Reference: https://claude.ai/code/artifact/455c2f91-7a9f-49aa-b336-fb4a6fde816e
