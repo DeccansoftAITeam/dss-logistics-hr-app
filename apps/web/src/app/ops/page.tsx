@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useAuthUser } from "@/context/UserContext";
+import { useAuthUser } from "../../context/UserContext";
 import {
   Shield,
   Activity,

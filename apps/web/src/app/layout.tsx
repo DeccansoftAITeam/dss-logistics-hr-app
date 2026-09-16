@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
-import { UserProvider } from "@/context/UserContext";
-import { Header } from "@/components/Header";
+import { UserProvider } from "../context/UserContext";
+import { Header } from "../components/Header";
 
 export const metadata: Metadata = {
   title: "DSS Logistics · Enterprise Policy & Intranet Portal",

@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useAuthUser } from "@/context/UserContext";
-import { FloatingChatbot } from "@/components/FloatingChatbot";
+import { useAuthUser } from "../context/UserContext";
+import { FloatingChatbot } from "../components/FloatingChatbot";
 import {
   BookOpen,
   Search,

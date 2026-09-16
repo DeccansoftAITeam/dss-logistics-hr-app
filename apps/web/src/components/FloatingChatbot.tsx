@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { useAuthUser } from "@/context/UserContext";
+import { useAuthUser } from "../context/UserContext";
 import {
   Send,
   Bot,

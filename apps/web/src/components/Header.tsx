@@ -4,7 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
-import { useAuthUser } from "@/context/UserContext";
+import { useAuthUser } from "../context/UserContext";
 import { Shield, BookOpen, LogIn, Lock, CheckCircle2, Clock } from "lucide-react";
 
 export const Header: React.FC = () => {
