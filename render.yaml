@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     rootDir: apps/web
-    buildCommand: pnpm install && pnpm build
+    buildCommand: corepack enable && pnpm install && pnpm build
     startCommand: pnpm start
     envVars:
       - key: NODE_ENV
@@ -34,7 +34,7 @@ services:
           name: ask-policy-db
           property: connectionString
       - key: AZURE_OPENAI_ENDPOINT
-        sync: false
+        value: https://suresh-azurefoundry-research.openai.azure.com/
       - key: AZURE_OPENAI_API_KEY
         sync: false
       - key: AZURE_OPENAI_CHAT_DEPLOYMENT
@@ -53,6 +53,10 @@ services:
         value: https://fde-dss-logistics.atlassian.net
       - key: JIRA_PROJECT_KEY
         value: HRSD
+      - key: JIRA_EMAIL
+        sync: false
+      - key: JIRA_API_TOKEN
+        sync: false
 
 databases:
   - name: ask-policy-db
