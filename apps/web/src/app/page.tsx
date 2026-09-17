@@ -19,6 +19,7 @@ import {
   X,
   Bot,
   Loader2,
+  WifiOff,
 } from "lucide-react";
 
 interface PolicyItem {
@@ -43,7 +44,7 @@ interface PolicyDetail extends PolicyItem {
 }
 
 export default function IntranetPortalPage() {
-  const { profile, loading: userLoading } = useAuthUser();
+  const { profile, degraded, loading: userLoading } = useAuthUser();
   const [policies, setPolicies] = useState<PolicyItem[]>([]);
   const [loadingPolicies, setLoadingPolicies] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -139,7 +140,21 @@ export default function IntranetPortalPage() {
         </div>
       </div>
 
-      {/* Pending Approval Notice */}
+      {/* Backend connection notice (degraded) — a network error is NOT an
+          authorization decision, so it must never read as one. */}
+      {degraded && (
+        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 shadow-xs flex items-center gap-3">
+          <WifiOff className="w-4 h-4 text-slate-500 flex-shrink-0" />
+          <p className="text-xs text-slate-600">
+            Connection to the policy service is temporarily unavailable
+            {profile ? " — showing your last known access" : ""}. Your access has not
+            changed; retry shortly
+            {profile?.role === "Admin" || profile?.role === "HR" ? " or open the Operations Console once the service responds." : "."}
+          </p>
+        </div>
+      )}
+
+      {/* Pending Approval Notice — shown ONLY for a backend-confirmed pending status */}
       {profile?.status === "pending_approval" && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 shadow-xs flex items-start gap-3.5">
           <Clock className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />

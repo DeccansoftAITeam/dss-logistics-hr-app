@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import { useAuthUser } from "../context/UserContext";
-import { Shield, BookOpen, LogIn, Lock, CheckCircle2, Clock } from "lucide-react";
+import { Shield, BookOpen, LogIn, Lock, CheckCircle2, Clock, WifiOff } from "lucide-react";
 
 export const Header: React.FC = () => {
   const pathname = usePathname();
@@ -72,7 +72,9 @@ export const Header: React.FC = () => {
                 <div className="flex items-center justify-end gap-1.5 mt-0.5">
                   <span
                     className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.2 rounded-md ${
-                      profile.status === "pending_approval"
+                      profile.status === "unknown"
+                        ? "bg-slate-100 text-slate-600"
+                        : profile.status === "pending_approval"
                         ? "bg-amber-100 text-amber-800"
                         : profile.role === "Admin"
                         ? "bg-purple-100 text-purple-800"
@@ -81,7 +83,12 @@ export const Header: React.FC = () => {
                         : "bg-blue-100 text-blue-800"
                     }`}
                   >
-                    {profile.status === "pending_approval" ? (
+                    {profile.status === "unknown" ? (
+                      <>
+                        <WifiOff className="w-2.5 h-2.5" />
+                        Offline
+                      </>
+                    ) : profile.status === "pending_approval" ? (
                       <>
                         <Clock className="w-2.5 h-2.5" />
                         Pending Approval
@@ -89,7 +96,7 @@ export const Header: React.FC = () => {
                     ) : (
                       <>
                         <CheckCircle2 className="w-2.5 h-2.5" />
-                        {profile.role}
+                        {profile.role ?? "User"}
                       </>
                     )}
                   </span>

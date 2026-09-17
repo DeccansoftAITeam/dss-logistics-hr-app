@@ -1,21 +1,25 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { useUser, useOrganization, useOrganizationList } from "@clerk/nextjs";
+
+export type ProfileStatus = "verified" | "pending_approval" | "rejected" | "unknown";
 
 export interface UserProfileData {
   id: string;
   email: string;
   fullName: string;
   imageUrl: string;
-  role: "Admin" | "HR" | "User";
-  status: "verified" | "pending_approval" | "rejected";
+  role: "Admin" | "HR" | "User" | null;
+  status: ProfileStatus;
   isHrOps: boolean;
   allowedGroups: string[];
 }
 
 interface UserContextType {
   profile: UserProfileData | null;
+  /** True when the backend could not be reached and `profile` is last-known-good. */
+  degraded: boolean;
   loading: boolean;
   refreshProfile: () => Promise<void>;
   getAuthHeaders: () => Record<string, string>;
@@ -32,7 +36,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     },
   });
   const [profile, setProfile] = useState<UserProfileData | null>(null);
+  const [degraded, setDegraded] = useState(false);
   const [loading, setLoading] = useState(true);
+  // Last-known-good profile from a successful sync. On a degraded backend call we
+  // keep showing this instead of downgrading the user to a fabricated state.
+  const lastGoodProfile = useRef<UserProfileData | null>(null);
 
   // Automatically activate DSS Logistics organization if none active
   useEffect(() => {
@@ -51,6 +59,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchProfile = useCallback(async () => {
     if (!isSignedIn) {
       setProfile(null);
+      lastGoodProfile.current = null;
+      setDegraded(false);
       setLoading(false);
       return;
     }
@@ -60,11 +70,24 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (res.ok) {
         const data = await res.json();
         if (data.authenticated && data.user) {
-          setProfile(data.user);
+          const next = data.user as UserProfileData;
+          // Backend unreachable -> keep last-known-good and surface a degraded
+          // banner. Never fabricate a status; never downgrade a verified user.
+          const backendUnreachable = data.degraded === true || next.status === "unknown";
+          if (backendUnreachable) {
+            setDegraded(true);
+            setProfile(lastGoodProfile.current ?? next);
+          } else {
+            setDegraded(false);
+            setProfile(next);
+            lastGoodProfile.current = next;
+          }
         }
       }
     } catch (e) {
       console.error("Failed to sync profile:", e);
+      setDegraded(true);
+      if (lastGoodProfile.current) setProfile(lastGoodProfile.current);
     } finally {
       setLoading(false);
     }
@@ -93,6 +116,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <UserContext.Provider
       value={{
         profile,
+        degraded,
         loading: loading || !clerkLoaded,
         refreshProfile: fetchProfile,
         getAuthHeaders,

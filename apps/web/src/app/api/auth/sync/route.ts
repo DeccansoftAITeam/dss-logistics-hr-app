@@ -51,7 +51,10 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 2. Query backend for user's DB profile & permissions
+    // 2. Query backend for user's DB profile & permissions.
+    // One retry absorbs Render free-tier cold starts (the first request after
+    // idle can take 30-50s; a single quick retry catches fast-warming cases and
+    // keeps us from fabricating a status on a transient blip).
     const token = await getToken();
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -63,8 +66,29 @@ export async function GET(req: NextRequest) {
       headers["Authorization"] = `Bearer ${token}`;
     }
 
-    const res = await fetch(`${BACKEND_URL}/ops/me`, { headers });
-    if (res.ok) {
+    const fetchProfile = () =>
+      fetch(`${BACKEND_URL}/ops/me`, { headers, signal: AbortSignal.timeout(25000) });
+
+    let res: Response | null = null;
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const r = await fetchProfile();
+        if (r.ok || r.status === 401 || r.status === 403) {
+          res = r;
+          break;
+        }
+        // 5xx / network-ish failure: brief backoff, then retry once.
+        lastErr = new Error(`backend status ${r.status}`);
+      } catch (e) {
+        lastErr = e;
+      }
+      if (attempt === 0) {
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
+
+    if (res && res.ok) {
       const data = await res.json();
       return NextResponse.json({
         authenticated: true,
@@ -81,15 +105,20 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // Backend unreachable or errored. Report an honest DEGRADED state — never
+    // fabricate "pending_approval", which the UI would render as an
+    // authorization decision. The client shows a connection warning instead.
     return NextResponse.json({
       authenticated: true,
+      degraded: true,
+      detail: lastErr instanceof Error ? lastErr.message : "backend_unreachable",
       user: {
         id: userId,
         email,
         fullName,
         imageUrl: user?.imageUrl || "",
-        role: "User",
-        status: "pending_approval",
+        role: null,
+        status: "unknown",
         isHrOps: false,
         allowedGroups: [],
       },
