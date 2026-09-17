@@ -416,7 +416,35 @@ class ChatService:
                     spans_data=spans_to_log,
                 )
 
-        # 6. Retrieval
+        # 6. Demo mode: without Azure OpenAI credentials there are no embeddings and
+        # no AI answers. Return an honest, self-explaining response instead of a crash.
+        if not settings.azure_openai_api_key:
+            demo_msg = (
+                "Demo mode: no AZURE_OPENAI_API_KEY is configured on this deployment, so AI "
+                "answers are unavailable. Everything else works — sign in, browse the policy "
+                "library, view permission denials, escalation flows and execution traces. A "
+                "deployment admin can enable AI answers by setting AZURE_OPENAI_ENDPOINT and "
+                "AZURE_OPENAI_API_KEY, then calling POST /admin/ingest."
+            )
+            latency = int((time.time() - start_time) * 1000)
+            spans_to_log.append({
+                "name": "model_call",
+                "status": "skip",
+                "detail": {"demo_mode": True, "reason": "no_azure_openai_credentials"},
+            })
+            return await self._create_response_and_trace(
+                session=session,
+                user=user,
+                conv_id=req.conversation_id,
+                user_msg=req.message,
+                answer=demo_msg,
+                outcome="declined",
+                citations=[],
+                latency_ms=latency,
+                spans_data=spans_to_log,
+            )
+
+        # 7. Retrieval
         t_ret_start = time.time()
         query_embedding = await self._embed_query(req.message)
         chunks = await self._retrieve_chunks(

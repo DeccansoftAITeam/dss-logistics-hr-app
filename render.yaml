@@ -1,3 +1,17 @@
+# Render Blueprint — DSS Ask Policy
+#
+# One-click deploy: https://render.com/deploy?repo=<your-fork-url>
+#
+# Participants: click the button, connect your own GitHub/Render account, fill in
+# the secrets when prompted, and Render creates YOUR OWN web + api + database.
+#
+# Required to click: nothing. The app boots in demo mode without external
+# credentials and provisions its own schema + policy library on first boot.
+#
+# Optional (enables live AI answers): your own Azure OpenAI resource.
+# Admin access: set ADMIN_BOOTSTRAP_EMAIL to YOUR email; the first sign-in with
+# that email is auto-promoted to a verified Admin.
+
 services:
   - type: web
     name: dss-ask-policy-web
@@ -12,11 +26,16 @@ services:
         sync: false
       - key: CLERK_SECRET_KEY
         sync: false
+      - key: NEXT_PUBLIC_CLERK_SIGN_IN_URL
+        value: /sign-in
+      - key: NEXT_PUBLIC_CLERK_SIGN_UP_URL
+        value: /sign-up
+      - key: CLERK_ORG_ID
+        sync: false
       - key: NEXT_PUBLIC_API_BASE_URL
-        fromService:
-          type: web
-          name: ask-policy-api
-          property: host
+        value: https://ask-policy-api.onrender.com
+      - key: INTERNAL_BACKEND_URL
+        value: https://ask-policy-api.onrender.com
 
   - type: web
     name: ask-policy-api
@@ -24,6 +43,7 @@ services:
     plan: free
     rootDir: backend
     buildCommand: pip install -e .
+    # The in-app one-time bootstrap provisions schema + corpus on first boot.
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: APP_ENV
@@ -32,8 +52,10 @@ services:
         fromDatabase:
           name: ask-policy-db
           property: connectionString
+      - key: ADMIN_BOOTSTRAP_EMAIL
+        sync: false
       - key: AZURE_OPENAI_ENDPOINT
-        value: https://suresh-azurefoundry-research.openai.azure.com/
+        sync: false
       - key: AZURE_OPENAI_API_KEY
         sync: false
       - key: AZURE_OPENAI_CHAT_DEPLOYMENT
@@ -45,11 +67,11 @@ services:
       - key: AZURE_STORAGE_CONTAINER
         value: dss-ask-policy-content
       - key: CLERK_JWKS_URL
-        value: https://sensible-skylark-9101.clerk.accounts.dev/.well-known/jwks.json
+        sync: false
       - key: CLERK_ORG_ID
-        value: org_3JOvLRFnE0PQixivSXSmJC5Gcdt
+        sync: false
       - key: JIRA_SITE_URL
-        value: https://fde-dss-logistics.atlassian.net
+        sync: false
       - key: JIRA_PROJECT_KEY
         value: HRSD
       - key: JIRA_EMAIL

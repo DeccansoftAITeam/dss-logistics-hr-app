@@ -44,8 +44,8 @@ AZURE_OPENAI_EMBEDDING_DEPLOYMENT = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT
 
 # Setup Azure OpenAI client for embeddings
 ai_client = AzureOpenAI(
-    azure_endpoint=AZURE_OPENAI_ENDPOINT,
-    api_key=AZURE_OPENAI_API_KEY,
+    azure_endpoint=AZURE_OPENAI_ENDPOINT or "https://placeholder.openai.azure.com/",
+    api_key=AZURE_OPENAI_API_KEY or "placeholder-key",
     api_version="2024-02-01",
 )
 
@@ -54,6 +54,12 @@ async_session = async_sessionmaker(engine, expire_on_commit=False)
 
 
 def get_embedding(text: str) -> list[float]:
+    if not AZURE_OPENAI_API_KEY:
+        # Demo mode: deterministic placeholder vector. Chunks are still stored and
+        # keyword (tsvector) search works; vector ranking is degraded but functional.
+        import hashlib as _h
+        seed = int(_h.sha256(text.encode("utf-8")).hexdigest()[:8], 16)
+        return [((seed >> (i % 24)) & 1) * 0.01 for i in range(1536)]
     response = ai_client.embeddings.create(
         input=text,
         model=AZURE_OPENAI_EMBEDDING_DEPLOYMENT,
@@ -210,7 +216,18 @@ async def ingest_corpus():
             for aud in audiences:
                 session.add(PolicyAudience(policy_version_id=version.id, audience_group=aud))
 
-            # 5. Sections and Chunks
+                       # 5. Sections and Chunks (cascade-delete citations that reference old chunks)
+            await session.execute(
+                text("""
+                    DELETE FROM message_citations
+                    WHERE policy_chunk_id IN (
+                        SELECT pc.id FROM policy_chunks pc
+                        JOIN policy_sections ps ON ps.id = pc.section_id
+                        WHERE ps.policy_version_id = :vid
+                    )
+                """),
+                {"vid": version.id},
+            )
             await session.execute(
                 delete(PolicySection).where(PolicySection.policy_version_id == version.id)
             )

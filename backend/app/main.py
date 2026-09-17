@@ -19,6 +19,9 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup logic
+    from app.core.bootstrap import bootstrap_if_needed
+
+    await bootstrap_if_needed()
     yield
     # Shutdown logic
 
