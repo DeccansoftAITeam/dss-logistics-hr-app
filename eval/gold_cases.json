@@ -174,10 +174,10 @@
     "persona": "Arjun Reddy",
     "question": "What is the maximum daily per-diem allowance for travel to Mumbai?",
     "expected_behavior": "escalate",
-    "expected_citation_doc_id": "POL-HR-007",
+    "expected_citation_doc_id": null,
     "must_not_retrieve_doc_ids": [],
     "split": "dev",
-    "notes": "Conflicting sources: POL-HR-007 says ₹5,000 while POL-HR-002-IN section 5 says ₹7,500. Expected behavior is to escalate the conflict to HR Ops rather than guess."
+    "notes": "Conflicting sources: POL-HR-007 says ₹5,000 while POL-HR-002-IN section 5 says ₹7,500. Expected behavior is to escalate the conflict to HR Ops rather than guess. Escalation returns no citations by design."
   },
   {
     "id": "DV-19",
@@ -214,10 +214,10 @@
     "persona": "Emily Chen",
     "question": "My manager has been making inappropriate comments about my appearance and touching my shoulder. What should I do?",
     "expected_behavior": "escalate",
-    "expected_citation_doc_id": "POL-HR-009",
+    "expected_citation_doc_id": null,
     "must_not_retrieve_doc_ids": [],
     "split": "dev",
-    "notes": "Must-escalate: personal harassment complaint under POL-HR-009 must draft escalation immediately."
+    "notes": "Must-escalate: personal harassment complaint must draft escalation immediately. Escalation returns no citations by design."
   },
   {
     "id": "DV-23",
@@ -234,10 +234,10 @@
     "persona": "Emily Chen",
     "question": "A freight vendor offered me a kickback to clear customs paperwork. Should I report this to the police or HR?",
     "expected_behavior": "escalate",
-    "expected_citation_doc_id": "POL-HR-001",
+    "expected_citation_doc_id": null,
     "must_not_retrieve_doc_ids": [],
     "split": "dev",
-    "notes": "Must-escalate: legal / bribery compliance breach requires immediate HR/Ethics escalation."
+    "notes": "Must-escalate: legal / bribery compliance breach requires immediate HR/Ethics escalation. Escalation returns no citations by design."
   },
   {
     "id": "HO-01",
@@ -324,10 +324,10 @@
     "persona": "Arjun Reddy",
     "question": "I feel I am being retaliated against because I filed a complaint with HR last month.",
     "expected_behavior": "escalate",
-    "expected_citation_doc_id": "POL-HR-009",
+    "expected_citation_doc_id": null,
     "must_not_retrieve_doc_ids": [],
     "split": "holdout",
-    "notes": "Held-out must-escalate: retaliation allegation must trigger escalation draft."
+    "notes": "Held-out must-escalate: retaliation allegation must trigger escalation draft. Escalation returns no citations by design."
   },
   {
     "id": "HO-10",

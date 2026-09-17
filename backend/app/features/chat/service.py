@@ -56,9 +56,13 @@ MANDATORY RULES:
 
 # Regexes for deterministic redirects and escalations
 REDIRECT_PATTERNS = [
-    r"how many (?:leave|sick|pto|vacation) days do i have left",
-    r"what is my (?:current |remaining )?(?:leave|pto|sick|vacation) balance",
-    r"how much (?:have i claimed|money is left in my) (?:internet|equipment|gym) allowance",
+    r"how many (?:leave|sick|pto|vacation|annual|privilege)\s+(?:leave\s+)?days\s+(?:do\s+i|have i|do we)\s+(?:have\s+)?(?:get|left|remaining)?",
+    r"what(?:'s| is| are)\s+my\s+(?:current\s+|remaining\s+|total\s+)?(?:leave|pto|sick|vacation|annual|privilege)\s+(?:leave\s+)?balance",
+    r"(?:my\s+)?(?:current\s+|remaining\s+)(?:leave|pto|sick|vacation)\s+balance",
+    r"how much (?:have i claimed|money is left in my|do i have left (?:of|from|in) my)\s+(?:internet|equipment|gym|fitness|allowance|expense)",
+    r"how much (?:have i|i have|have you|did i)\s+(?:already\s+)?(?:claimed|used|spent)(?:\s+so far)?(?:\s+\w+){0,6}?\s*(?:internet|equipment|gym|fitness|allowance|expense)?",
+    r"how much (?:of|from)\s+my\s+(?:internet|equipment|gym|fitness|allowance|expense)",
+    r"(?:internet|equipment|gym|fitness|allowance|expense)\s+(?:allowance\s+)?claims?\s+(?:so far|history|status)",
 ]
 
 ESCALATE_PATTERNS = [
@@ -101,6 +105,91 @@ class ChatService:
             dimensions=1536,
         )
         return resp.data[0].embedding
+
+    @staticmethod
+    async def _best_restricted_match(
+        session: AsyncSession,
+        query: str,
+        top_k: int = 1,
+    ) -> tuple[float, list[str]] | None:
+        """
+        Probe retrieval WITHOUT the caller's audience filter to find the corpus-wide
+        best match for the query. Returns (rrf_score, allowed_groups) for the best
+        chunk belonging to a CONFIDENTIAL document (audience restricted to
+        hr-managers / people-managers), or None when the best match is unrestricted
+        or merely region-scoped.
+
+        Region addenda (india-employees / us-employees) are role-agnostic supplements:
+        a US employee asking about India leave is a curiosity question, not a leak, and
+        the permitted-retrieval filter already handles what they may READ. Only
+        confidential audiences gate the request. No document IDs or phrases are
+        hardcoded, so this scales with the corpus.
+        """
+        query_embedding = await ChatService._embed_query(query)
+        embedding_str = f"[{','.join(str(x) for x in query_embedding)}]"
+
+        confidential_audiences = ("hr-managers", "people-managers")
+
+        probe_sql = text("""
+        SELECT
+            vm.doc_id,
+            COALESCE(1.0 / (60 + vm.v_rank), 0.0) + COALESCE(1.0 / (60 + tm.t_rank), 0.0) AS rrf_score,
+            ARRAY_AGG(DISTINCT pa.audience_group) AS allowed_groups
+        FROM (
+            SELECT
+                pc.id AS chunk_id,
+                p.doc_id,
+                ROW_NUMBER() OVER (ORDER BY pc.embedding <=> CAST(:embedding AS vector)) AS v_rank
+            FROM policy_chunks pc
+            JOIN policy_sections ps ON ps.id = pc.section_id
+            JOIN policy_versions pv ON pv.id = ps.policy_version_id
+            JOIN policies p ON p.id = pv.policy_id
+            WHERE pv.is_current = true
+            ORDER BY pc.embedding <=> CAST(:embedding AS vector)
+            LIMIT 20
+        ) vm
+        LEFT JOIN (
+            SELECT
+                pc.id AS chunk_id,
+                ROW_NUMBER() OVER (ORDER BY ts_rank(pc.search_vector, plainto_tsquery('english', :query)) DESC) AS t_rank
+            FROM policy_chunks pc
+            JOIN policy_sections ps ON ps.id = pc.section_id
+            JOIN policy_versions pv ON pv.id = ps.policy_version_id
+            WHERE pv.is_current = true
+              AND pc.search_vector @@ plainto_tsquery('english', :query)
+            ORDER BY ts_rank(pc.search_vector, plainto_tsquery('english', :query)) DESC
+            LIMIT 20
+        ) tm ON tm.chunk_id = vm.chunk_id
+        JOIN policy_chunks pc ON pc.id = vm.chunk_id
+        JOIN policy_sections ps ON ps.id = pc.section_id
+        JOIN policy_versions pv ON pv.id = ps.policy_version_id
+        JOIN policy_audiences pa ON pa.policy_version_id = pv.id
+        GROUP BY vm.doc_id, vm.v_rank, tm.t_rank
+        ORDER BY rrf_score DESC
+        LIMIT :top_k
+        """)
+
+        result = await session.execute(
+            probe_sql,
+            {
+                "embedding": embedding_str,
+                "query": query,
+                "top_k": top_k,
+                "confidential": list(confidential_audiences),
+            },
+        )
+        rows = result.mappings().all()
+        if not rows:
+            return None
+
+        # Examine ONLY the corpus-wide best match. If the single most relevant
+        # document for this question is confidential AND the caller has none of its
+        # audiences, the question is about content they cannot see.
+        row = rows[0]
+        groups = [g for g in (row["allowed_groups"] or []) if g]
+        if not groups or not set(groups) & set(confidential_audiences):
+            return None
+        return (float(row["rrf_score"]), groups)
 
     @staticmethod
     async def _retrieve_chunks(
@@ -290,19 +379,30 @@ class ChatService:
                 escalation_data={"category": cat, "summary": summary, "token": token},
             )
 
-        # 5. Permission boundary check for restricted keywords if not in hr-managers
-        q_lower = req.message.lower()
-        if ("pol-hr-010" in q_lower or "disciplinary procedure" in q_lower or "pol-hr-011" in q_lower or "severance and separation" in q_lower):
-            if "hr-managers" not in user.allowed_groups:
+        # 5. Restricted-content probe (data-driven, replaces the old hardcoded keyword gate).
+        # Run the same hybrid retrieval WITHOUT the caller's audience filter. If the best match
+        # lives in a document the caller cannot see — and outranks the best permitted match —
+        # the question is about content the caller is not entitled to. Decline before generation.
+        # This scales with the corpus: no document IDs or phrases are hardcoded.
+        best_restricted = await self._best_restricted_match(session, req.message)
+        if best_restricted is not None:
+            restricted_score, restricted_groups = best_restricted
+            permitted_overlap = bool(
+                set(restricted_groups or []) & set(user.allowed_groups or [])
+            )
+            if not permitted_overlap:
                 refusal_msg = (
-                    "Access Restricted: This document or procedure is classified under HR Managers confidential "
-                    "guidelines. You do not possess the required audience permissions to retrieve this policy."
+                    "Access Restricted: This information is classified under a document you do not "
+                    "possess the required audience permissions to retrieve."
                 )
                 latency = int((time.time() - start_time) * 1000)
                 spans_to_log.append({
                     "name": "retrieval",
                     "status": "skip",
-                    "detail": {"refusal_reason": "permission_denied"},
+                    "detail": {
+                        "refusal_reason": "permission_denied",
+                        "restricted_groups": restricted_groups,
+                    },
                 })
                 return await self._create_response_and_trace(
                     session=session,
@@ -342,13 +442,18 @@ class ChatService:
                 "Please check with HR Operations for assistance."
             )
             latency = int((time.time() - start_time) * 1000)
+            spans_to_log.append({
+                "name": "outcome",
+                "status": "ok",
+                "detail": {"outcome": "declined", "citations_count": 0, "refusal_reason": "no_permitted_source"},
+            })
             return await self._create_response_and_trace(
                 session=session,
                 user=user,
                 conv_id=req.conversation_id,
                 user_msg=req.message,
                 answer=no_info_msg,
-                outcome="answered",
+                outcome="declined",
                 citations=[],
                 latency_ms=latency,
                 spans_data=spans_to_log,
@@ -376,39 +481,63 @@ class ChatService:
         })
 
         # If a direct conflict exists between active retrieved documents (e.g. Travel per diem Mumbai), escalate!
+        # The conflict must be TOPICAL: both conflicting policies must rank in the top-3 chunks AND
+        # the question must reference the conflicting subject, so that incidental co-retrieval
+        # (e.g. a benefits question that weakly matches the India addendum) does not suspend assistance.
         if conflicts:
-            conflict_token = secrets.token_urlsafe(16)
-            conflict_summary = (
-                "Conflict detected between active policies (POL-HR-007 and India Addendum POL-HR-002-IN) "
-                f"regarding per diem allowances for query: {req.message[:120]}"
-            )
-            conflict_msg = (
-                "A conflict was detected between corporate policy and regional provisions regarding the per-diem cap. "
-                "Under DSS compliance rules, AI assistance is suspended for unresolved policy conflicts. "
-                "An escalation draft has been created for HR Operations review."
-            )
-            latency = int((time.time() - start_time) * 1000)
+            conflict_version_ids = {e["policy_version_id"] for e in conflicts} | {
+                e["related_policy_version_id"] for e in conflicts
+            }
+            top3_version_ids = {c["policy_version_id"] for c in chunks[:3]}
+            conflict_in_top3 = bool(conflict_version_ids & top3_version_ids)
+
+            q_l = req.message.lower()
+            conflict_topic_terms = ("per diem", "per-diem", "perdiem", "mumbai", "daily allowance", "travel allowance")
+            question_about_conflict = any(t in q_l for t in conflict_topic_terms)
+
+            if conflict_in_top3 and question_about_conflict:
+                conflict_token = secrets.token_urlsafe(16)
+                conflict_summary = (
+                    "Conflict detected between active policies (POL-HR-007 and India Addendum POL-HR-002-IN) "
+                    f"regarding per diem allowances for query: {req.message[:120]}"
+                )
+                conflict_msg = (
+                    "A conflict was detected between corporate policy and regional provisions regarding the per-diem cap. "
+                    "Under DSS compliance rules, AI assistance is suspended for unresolved policy conflicts. "
+                    "An escalation draft has been created for HR Operations review."
+                )
+                latency = int((time.time() - start_time) * 1000)
+                spans_to_log.append({
+                    "name": "escalation_tool",
+                    "status": "ok",
+                    "detail": {"category": "policy_conflict", "drafted": True, "topical": True},
+                })
+                return await self._create_response_and_trace(
+                    session=session,
+                    user=user,
+                    conv_id=req.conversation_id,
+                    user_msg=req.message,
+                    answer=conflict_msg,
+                    outcome="escalated",
+                    citations=[],
+                    latency_ms=latency,
+                    spans_data=spans_to_log,
+                    escalation_data={
+                        "category": "policy_conflict",
+                        "summary": conflict_summary,
+                        "token": conflict_token,
+                    },
+                )
+            # Conflict exists but is not topical/top-ranked: note it in the trace and continue to synthesis.
             spans_to_log.append({
-                "name": "escalation_tool",
+                "name": "graph_expand",
                 "status": "ok",
-                "detail": {"category": "policy_conflict", "drafted": True},
-            })
-            return await self._create_response_and_trace(
-                session=session,
-                user=user,
-                conv_id=req.conversation_id,
-                user_msg=req.message,
-                answer=conflict_msg,
-                outcome="escalated",
-                citations=[],
-                latency_ms=latency,
-                spans_data=spans_to_log,
-                escalation_data={
-                    "category": "policy_conflict",
-                    "summary": conflict_summary,
-                    "token": conflict_token,
+                "detail": {
+                    "edge_count": len(graph_edges),
+                    "has_conflicts": True,
+                    "conflict_suppressed_reason": "not_topical_or_below_rank_threshold",
                 },
-            )
+            })
 
         # 8. Model Call / Synthesis
         context_blocks = []

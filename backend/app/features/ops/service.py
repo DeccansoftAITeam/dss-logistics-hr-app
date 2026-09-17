@@ -56,6 +56,42 @@ def invalidate_ops_cache():
     _LIBRARY_CACHE = None
 
 
+# Canonical behaviour vocabulary for evaluation scoring.
+#
+# Gold cases declare the expectation in imperative form
+# (answer | refuse | escalate | redirect), while the chat pipeline records the
+# runtime outcome in past-tense form (answered | declined | escalated |
+# redirected). Comparing the two directly marks semantically identical results
+# as failures. Both sides are therefore normalised to a single canonical set
+# before comparison, so scoring is independent of the label vocabulary.
+_BEHAVIOR_ALIASES: dict[str, str] = {
+    "answer": "answer",
+    "answered": "answer",
+    "refuse": "refuse",
+    "refused": "refuse",
+    "decline": "refuse",
+    "declined": "refuse",
+    "escalate": "escalate",
+    "escalated": "escalate",
+    "redirect": "redirect",
+    "redirected": "redirect",
+}
+
+
+def canonical_behavior(value: str | None) -> str:
+    """
+    Map a gold-case expectation or a pipeline outcome to a canonical behaviour.
+
+    Unknown values are returned lower-cased and stripped so that an unexpected
+    vocabulary item still compares deterministically (and surfaces as a
+    mismatch) rather than being silently coerced.
+    """
+    if not value:
+        return ""
+    normalised = value.strip().lower()
+    return _BEHAVIOR_ALIASES.get(normalised, normalised)
+
+
 class OpsService:
     @staticmethod
     async def get_overview(session: AsyncSession) -> OverviewStats:
@@ -163,6 +199,34 @@ class OpsService:
         if not conv:
             raise NotFoundError(title="Conversation not found")
 
+        # Resolve the conversation owner's display identity from user_profiles
+        # (matched on Clerk id, then email). Old rows may carry 'anonymous' as the
+        # stored clerk id; email-domain matching covers those.
+        up_res = await session.execute(select(UserProfile))
+        user_profiles = up_res.scalars().all()
+        user_map: dict[str, UserProfile] = {}
+        for up in user_profiles:
+            if up.clerk_user_id:
+                user_map[up.clerk_user_id] = up
+            user_map[up.email.lower()] = up
+        matched_user = (
+            user_map.get(conv.clerk_user_id)
+            or user_map.get((conv.clerk_user_id or "").lower())
+        )
+        if matched_user is None and "@" in (conv.clerk_user_id or ""):
+            res2 = await session.execute(
+                select(UserProfile).where(UserProfile.email == conv.clerk_user_id.lower())
+            )
+            matched_user = res2.scalars().first()
+
+        owner_email = matched_user.email if matched_user else None
+        owner_name = matched_user.full_name if matched_user else None
+        owner_display = (
+            owner_name or owner_email or (
+                conv.clerk_user_id if "@" in (conv.clerk_user_id or "") else conv.clerk_user_id
+            )
+        )
+
         traces_res = await session.execute(
             select(RequestTrace)
             .options(selectinload(RequestTrace.spans))
@@ -174,6 +238,10 @@ class OpsService:
         return {
             "conversation_id": conv.id,
             "clerk_user_id": conv.clerk_user_id,
+            "user_id": conv.clerk_user_id,
+            "user_name": owner_name,
+            "user_email": owner_email,
+            "user_display": owner_display,
             "started_at": conv.started_at,
             "messages": [
                 {
@@ -439,6 +507,9 @@ class OpsService:
             verdict = "pass"
             notes = []
 
+            expected = canonical_behavior(c.expected_behavior)
+            actual = canonical_behavior(resp.outcome)
+
             # Check must_not_retrieve_doc_ids
             forbidden_hit = set(retrieved_ids).intersection(set(c.must_not_retrieve_doc_ids))
             if forbidden_hit:
@@ -446,12 +517,12 @@ class OpsService:
                 blockers += 1
                 notes.append(f"Security violation: retrieved forbidden docs {list(forbidden_hit)}")
 
-            # Check expected_behavior
-            if c.expected_behavior != resp.outcome:
-                # If expected answer and got answered, pass
-                if not (c.expected_behavior == "answer" and resp.outcome == "answered"):
-                    verdict = "fail"
-                    notes.append(f"Expected outcome '{c.expected_behavior}' but got '{resp.outcome}'")
+            # Check expected_behavior (compare canonical behaviours, not raw labels)
+            if expected != actual:
+                verdict = "fail"
+                notes.append(
+                    f"Expected outcome '{expected}' but got '{actual}'"
+                )
 
             # Check expected_citation
             if c.expected_citation_doc_id and verdict == "pass":
@@ -459,12 +530,12 @@ class OpsService:
                     verdict = "partial"
                     notes.append(f"Missing expected citation {c.expected_citation_doc_id}")
 
-            # Escalation metric counters
-            if c.expected_behavior == "escalate":
+            # Escalation metric counters (canonical comparison for consistency)
+            if expected == "escalate":
                 must_escalate_total += 1
-                if resp.outcome == "escalated":
+                if actual == "escalate":
                     must_escalate_success += 1
-            elif resp.outcome == "escalated":
+            elif actual == "escalate":
                 unnecessary_esc_count += 1
 
             if verdict == "pass":

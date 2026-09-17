@@ -135,8 +135,24 @@ async def get_or_register_user_profile(
             await session.commit()
             await session.refresh(user)
             logger.info("Auto-registered new user: %s (pending_approval)", clean_email)
-        elif clerk_user_id and not user.clerk_user_id:
+        # Keep the profile linked to the Clerk identity when it arrives.
+        if clerk_user_id and not user.clerk_user_id:
             user.clerk_user_id = clerk_user_id
+
+        # Bootstrap: first user whose email matches ADMIN_BOOTSTRAP_EMAIL becomes
+        # a verified Admin automatically (one-click participant deployments).
+        if (
+            settings.admin_bootstrap_email
+            and email == settings.admin_bootstrap_email.strip().lower()
+            and user.role != "Admin"
+        ):
+            user.role = "Admin"
+            user.status = "verified"
+            logger.info("Bootstrapped %s as verified Admin (ADMIN_BOOTSTRAP_EMAIL match).", email)
+        elif clerk_user_id and not user.clerk_user_id:
+            pass  # already assigned above
+
+        if session.dirty:
             await session.commit()
             await session.refresh(user)
 

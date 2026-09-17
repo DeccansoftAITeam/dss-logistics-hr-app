@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     # Session / Cache
     permission_cache_ttl_seconds: int = 300
 
+    # Bootstrap admin: if set, this email is auto-promoted to verified Admin on
+    # first sign-in. Used for one-click participant deployments where the database
+    # starts empty.
+    admin_bootstrap_email: str = ""
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"

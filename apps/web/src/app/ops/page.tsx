@@ -24,6 +24,7 @@ import {
   UserCheck,
   X,
   Loader2,
+  User,
 } from "lucide-react";
 
 export default function OpsPage() {
@@ -47,6 +48,7 @@ export default function OpsPage() {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
+  const [traceLoading, setTraceLoading] = useState(false);
   const [evalRunning, setEvalRunning] = useState(false);
   const [reclassifying, setReclassifying] = useState(false);
   const [reclassifyMsg, setReclassifyMsg] = useState<string | null>(null);
@@ -97,6 +99,7 @@ export default function OpsPage() {
   // Fetch trace for selected conversation
   const loadTrace = async (convId: string) => {
     setSelectedConvId(convId);
+    setTraceLoading(true);
     try {
       const res = await fetch(`${apiBase}/ops/conversations/${convId}/trace`, { headers: getAuthHeaders() });
       if (res.ok) {
@@ -104,6 +107,8 @@ export default function OpsPage() {
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setTraceLoading(false);
     }
   };
 
@@ -422,11 +427,32 @@ export default function OpsPage() {
           </div>
 
           <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 shadow-xs max-h-[600px] overflow-y-auto">
-            {selectedTrace ? (
+            {traceLoading ? (
+              <div className="h-full min-h-[200px] flex flex-col items-center justify-center text-slate-400 gap-2">
+                <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
+                <span className="text-xs">Loading execution trace…</span>
+              </div>
+            ) : selectedTrace ? (
               <div className="space-y-5">
                 <div>
                   <h3 className="text-base font-bold text-slate-900">Execution Trace Diagnostics</h3>
-                  <span className="text-xs text-slate-400 font-mono">ID: {selectedTrace.conversation_id}</span>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="text-xs text-slate-400 font-mono">ID: {selectedTrace.conversation_id}</span>
+                    {selectedTrace.user_display && (
+                      <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        <User className="w-3.5 h-3.5 text-emerald-600" />
+                        {selectedTrace.user_display}
+                      </span>
+                    )}
+                    {selectedTrace.user_email && (
+                      <a
+                        href={`mailto:${selectedTrace.user_email}`}
+                        className="text-xs text-slate-500 hover:text-emerald-700 underline decoration-slate-300"
+                      >
+                        {selectedTrace.user_email}
+                      </a>
+                    )}
+                  </div>
                 </div>
 
                 <div>

@@ -28,4 +28,4 @@ India employees accrue 22 days of Privilege Leave (Earned Leave) per year. Up to
 India employees receive 10 paid public and festival holidays annually, as published in the annual DSS India Holiday Calendar (CAL-2026). Mandatory holidays include Republic Day, Independence Day, and Mahatma Gandhi Jayanti.
 
 ## 5. Regional Travel Expense Supplement (India)
-For domestic operational travel within India, employees visiting Tier-1 metropolitan hubs receive a daily per diem allowance. Specifically for official travel to Mumbai, the daily per-diem cap for lodging and meals is fixed at ₹7,500 per day.
+For domestic operational travel within India, employees visiting Tier-1 metropolitan hubs receive a daily per diem allowance. Specifically for official travel to Mumbai, the daily per-diem cap for lodging and meals is fixed at ₹7,500 per day. Note: this regional supplement is governed by the regional addendum and takes precedence for India-based employees.
