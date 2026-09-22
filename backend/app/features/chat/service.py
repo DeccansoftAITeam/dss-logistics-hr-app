@@ -672,7 +672,7 @@ class ChatService:
         t_model_dur = int((time.time() - t_model_start) * 1000)
         spans_to_log.append({
             "name": "model_call",
-            "status": "ok" if model_call_ok else "error",
+            "status": "ok" if model_call_ok else "bad",
             "duration_ms": t_model_dur,
             "detail": {"model": settings.azure_openai_chat_deployment},
         })
