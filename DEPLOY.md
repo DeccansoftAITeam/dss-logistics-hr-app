@@ -1,5 +1,7 @@
 # One-Click Deployment Guide
 
+> 🎓 **Beginner?** Follow [`docs/beginner-guide/00-start-here.md`](docs/beginner-guide/00-start-here.md) instead — it covers accounts, keys, forking and this deploy flow click-by-click with a troubleshooting guide. This page is the fast path.
+
 **Audience:** FDE cohort participants deploying their own instance of DSS Ask Policy.
 **Time:** ~10 minutes · **Cost:** $0 (free tiers) · **ML knowledge required:** none
 

@@ -6,6 +6,8 @@ A **permission-aware enterprise policy assistant** built as the capstone artifac
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
 
+> 🎓 **Absolute beginner?** Don't start here — follow the step-by-step beginner guide: [`docs/beginner-guide/00-start-here.md`](docs/beginner-guide/00-start-here.md). It assumes zero prior knowledge and requires no software installs. `DEPLOY.md` below is the fast path for people who already know Git and Render.
+
 **Deploying your own instance?** → Read [`DEPLOY.md`](DEPLOY.md). Ten minutes, free tier, no ML knowledge required. The app boots in demo mode without any external keys and provisions its own database, policy library and evaluation set on first boot.
 
 ---
@@ -34,6 +36,7 @@ corpus/         14 synthetic policy documents (Markdown + YAML front matter)
 eval/           gold_cases.json — 36 hand-written evaluation cases
 scripts/        ingestion + user seeding
 docs/           plans, guides, deliverable artifacts (PRD, TID, executive deck)
+docs/beginner-guide/  step-by-step beginner track: zero-knowledge → own deployment
 render.yaml     Render Blueprint (one-click deploy)
 DEPLOY.md       participant deployment guide
 ```
