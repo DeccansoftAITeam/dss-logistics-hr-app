@@ -32,10 +32,19 @@ services:
         value: /sign-up
       - key: CLERK_ORG_ID
         sync: false
-      - key: NEXT_PUBLIC_API_BASE_URL
-        value: https://ask-policy-api.onrender.com
-      - key: INTERNAL_BACKEND_URL
-        value: https://ask-policy-api.onrender.com
+      # Backend URL is wired automatically via Render private networking —
+      # participants never type their API URL anywhere. (INTERNAL_BACKEND_URL /
+      # NEXT_PUBLIC_API_BASE_URL, if set manually, still win as overrides.)
+      - key: BACKEND_PRIVATE_HOST
+        fromService:
+          name: ask-policy-api
+          type: web
+          property: host
+      - key: BACKEND_PRIVATE_PORT
+        fromService:
+          name: ask-policy-api
+          type: web
+          property: port
 
   - type: web
     name: ask-policy-api
