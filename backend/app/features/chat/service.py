@@ -98,13 +98,22 @@ class ChatService:
         return None
 
     @staticmethod
-    async def _embed_query(query: str) -> list[float]:
-        resp = ai_client.embeddings.create(
-            input=query,
-            model=settings.azure_openai_embedding_deployment,
-            dimensions=1536,
-        )
-        return resp.data[0].embedding
+    async def _embed_query(query: str) -> list[float] | None:
+        """
+        Embed a query for hybrid vector retrieval. Returns None when the embedding
+        call fails (e.g. invalid Azure OpenAI credentials, outage, rate limit) so
+        callers can degrade to keyword-only retrieval instead of crashing the request.
+        """
+        try:
+            resp = ai_client.embeddings.create(
+                input=query,
+                model=settings.azure_openai_embedding_deployment,
+                dimensions=1536,
+            )
+            return resp.data[0].embedding
+        except Exception as e:
+            logger.error("Embedding call failed; degrading to keyword-only retrieval: %s", e)
+            return None
 
     @staticmethod
     async def _best_restricted_match(
@@ -126,6 +135,10 @@ class ChatService:
         hardcoded, so this scales with the corpus.
         """
         query_embedding = await ChatService._embed_query(query)
+        if query_embedding is None:
+            # Cannot evaluate the restricted-content probe without vector scores.
+            # Skip it (fail open) rather than blocking the user on degraded retrieval.
+            return None
         embedding_str = f"[{','.join(str(x) for x in query_embedding)}]"
 
         confidential_audiences = ("hr-managers", "people-managers")
@@ -265,6 +278,53 @@ class ChatService:
             query_sql,
             {
                 "embedding": embedding_str,
+                "allowed_groups": list(allowed_groups),
+                "query": query,
+                "top_k": top_k,
+            },
+        )
+        rows = result.mappings().all()
+        return [dict(r) for r in rows]
+
+    @staticmethod
+    async def _retrieve_chunks_keyword_only(
+        session: AsyncSession,
+        query: str,
+        allowed_groups: list[str],
+        top_k: int = 5,
+    ) -> list[dict[str, Any]]:
+        """
+        Degraded-mode retrieval: PostgreSQL tsvector full-text search only, with the
+        same strict SQL-level audience filtering. Used when the embedding service is
+        unavailable so the assistant keeps working (with reduced recall) instead of
+        returning HTTP 500.
+        """
+        keyword_sql = text("""
+        SELECT
+            pc.id AS chunk_id,
+            pc.text_content,
+            pc.section_id,
+            pv.id AS policy_version_id,
+            pv.version_label,
+            p.doc_id,
+            p.title,
+            ps.heading_path,
+            ts_rank(pc.search_vector, plainto_tsquery('english', :query)) AS rrf_score
+        FROM policy_chunks pc
+        JOIN policy_sections ps ON ps.id = pc.section_id
+        JOIN policy_versions pv ON pv.id = ps.policy_version_id
+        JOIN policies p ON p.id = pv.policy_id
+        JOIN policy_audiences pa ON pa.policy_version_id = pv.id
+        WHERE pa.audience_group = ANY(:allowed_groups)
+          AND pv.is_current = true
+          AND pc.search_vector @@ plainto_tsquery('english', :query)
+        ORDER BY rrf_score DESC
+        LIMIT :top_k;
+        """)
+
+        result = await session.execute(
+            keyword_sql,
+            {
                 "allowed_groups": list(allowed_groups),
                 "query": query,
                 "top_k": top_k,
@@ -444,16 +504,27 @@ class ChatService:
                 spans_data=spans_to_log,
             )
 
-        # 7. Retrieval
+        # 7. Retrieval — hybrid (vector + keyword) when embeddings are available,
+        # keyword-only when the embedding service is unreachable, so an Azure
+        # credential/outage problem degrades recall instead of crashing with a 500.
         t_ret_start = time.time()
         query_embedding = await self._embed_query(req.message)
-        chunks = await self._retrieve_chunks(
-            session=session,
-            query=req.message,
-            query_embedding=query_embedding,
-            allowed_groups=user.allowed_groups,
-            top_k=5,
-        )
+        degraded_retrieval = query_embedding is None
+        if degraded_retrieval:
+            chunks = await self._retrieve_chunks_keyword_only(
+                session=session,
+                query=req.message,
+                allowed_groups=user.allowed_groups,
+                top_k=5,
+            )
+        else:
+            chunks = await self._retrieve_chunks(
+                session=session,
+                query=req.message,
+                query_embedding=query_embedding,
+                allowed_groups=user.allowed_groups,
+                top_k=5,
+            )
         t_ret_dur = int((time.time() - t_ret_start) * 1000)
 
         retrieved_doc_ids = list({c["doc_id"] for c in chunks})
@@ -461,7 +532,11 @@ class ChatService:
             "name": "retrieval",
             "status": "ok" if chunks else "skip",
             "duration_ms": t_ret_dur,
-            "detail": {"retrieved_doc_ids": retrieved_doc_ids, "chunk_count": len(chunks)},
+            "detail": {
+                "retrieved_doc_ids": retrieved_doc_ids,
+                "chunk_count": len(chunks),
+                **({"mode": "keyword_only_fallback"} if degraded_retrieval else {}),
+            },
         })
 
         if not chunks:
@@ -578,6 +653,7 @@ class ChatService:
         user_prompt = f"POLICY CONTEXT:\n{formatted_context}\n\nEMPLOYEE QUESTION:\n{req.message}"
 
         t_model_start = time.time()
+        model_call_ok = True
         try:
             completion = ai_client.chat.completions.create(
                 model=settings.azure_openai_chat_deployment,
@@ -589,13 +665,14 @@ class ChatService:
             )
             answer_text = completion.choices[0].message.content or ""
         except Exception as e:
+            model_call_ok = False
             logger.error("LLM synthesis error: %s", e)
             answer_text = "I encountered an error synthesizing policy guidance. Please contact HR Operations."
 
         t_model_dur = int((time.time() - t_model_start) * 1000)
         spans_to_log.append({
             "name": "model_call",
-            "status": "ok",
+            "status": "ok" if model_call_ok else "error",
             "duration_ms": t_model_dur,
             "detail": {"model": settings.azure_openai_chat_deployment},
         })
